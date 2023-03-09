@@ -1,0 +1,37 @@
+name: Preview
+
+on:
+  pull_request:
+    # when using teardown: 'true', add default event types + closed event type
+    types: [opened, synchronize, reopened, closed]
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # allow surge-preview to create/update PR comments
+    steps:
+      - name: Install Hugo CLI
+        env:
+          HUGO_VERSION: 0.110.0
+        run: |
+          wget -O ${{ runner.temp }}/hugo.deb https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_${HUGO_VERSION}_linux-amd64.deb \
+          && sudo dpkg -i ${{ runner.temp }}/hugo.deb
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+          fetch-depth: 1
+      - run: npm install --only=dev
+      - name: Set BASEURL
+        run: |
+          export PRNUMBER=$(jq --raw-output .pull_request.number "$GITHUB_EVENT_PATH")
+          export REPO=$(echo ${{ github.repository }} | tr / -)
+          echo BASEURL="https://"$REPO"-preview-pr-"$PRNUMBER".surge.sh/" >> $GITHUB_ENV
+      - uses: afc163/surge-preview@v1
+        with:
+          surge_token: ${{ secrets.SURGE_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          dist: public
+          failOnError: 'true'
+          teardown: 'true'
+          build: hugo --gc --minify --verbose --baseURL ${{ env.BASEURL }}"
